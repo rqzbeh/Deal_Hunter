@@ -351,8 +351,30 @@ async def main():
                     await send_telegram(message)
                     print(f"Product added successfully! Total products: {len(products)}")
                 except Exception as e:
-                    print(f"Error adding product: {e}")
-                    print("Please try again or type 'done' to finish.")
+                    error_msg = str(e)
+                    if "closed" in error_msg.lower() or "context" in error_msg.lower():
+                        print("Browser context was closed. Attempting to recreate...")
+                        try:
+                            # Close the old context if it exists
+                            try:
+                                await context.close()
+                            except:
+                                pass
+                            # Recreate context
+                            context = await p.chromium.launch_persistent_context(
+                                user_data_dir,
+                                executable_path=config["executable_path"],
+                                headless=config["headless"],
+                                args=["--remote-debugging-port=9222"]
+                            )
+                            print("Browser context recreated successfully. Please try adding the product again.")
+                        except Exception as recreate_error:
+                            print(f"Failed to recreate browser context: {recreate_error}")
+                            print("Please restart the script.")
+                            break
+                    else:
+                        print(f"Error adding product: {e}")
+                        print("Please try again or type 'done' to finish.")
 
             # Save products to JSON
             if products:
