@@ -18,29 +18,30 @@ except ImportError:
 logging.basicConfig(filename='deal_hunter.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
 def get_browser_config(is_setup=False):
-    # Use system-installed Microsoft Edge
-    edge_paths = [
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-    ]
-    
-    executable_path = None
-    for path in edge_paths:
-        if os.path.exists(path):
-            executable_path = path
-            break
-    
-    if executable_path:
-        print(f"Using Edge executable: {executable_path}")
-    else:
-        print("Warning: Could not find Edge executable in standard locations!")
-    
+    # Use system-installed Microsoft Edge for setup, Chromium for headless monitoring
     if is_setup:
         # Use GUI mode for setup to allow clicking
+        edge_paths = [
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        ]
+        
+        executable_path = None
+        for path in edge_paths:
+            if os.path.exists(path):
+                executable_path = path
+                break
+        
+        if executable_path:
+            print(f"Using Edge executable for setup: {executable_path}")
+        else:
+            print("Warning: Could not find Edge executable for setup!")
+        
         return {"executable_path": executable_path, "headless": False}
     else:
-        # Use headless mode for monitoring
-        return {"executable_path": executable_path, "headless": True}
+        # Use headless Chromium for monitoring (better VPS compatibility)
+        print("Using Chromium for headless monitoring")
+        return {"channel": "chromium", "headless": True}
 
 def get_user_data_dir():
     return f"C:\\Users\\{os.environ['USERNAME']}\\AppData\\Local\\Microsoft\\Edge\\User Data"
@@ -308,6 +309,7 @@ async def main():
     if not products:
         # Setup new products - always use GUI mode for element selection
         async with async_playwright() as p:
+            config = get_browser_config(is_setup=True)  # GUI mode for setup
             context = await p.chromium.launch_persistent_context(
                 user_data_dir,
                 executable_path=config["executable_path"],
@@ -400,7 +402,7 @@ async def main():
                 config = get_browser_config(is_setup=False)  # Headless mode for monitoring
                 context = await p.chromium.launch_persistent_context(
                     user_data_dir,
-                    executable_path=config["executable_path"],
+                    channel=config.get("channel"),
                     headless=config["headless"],
                     args=["--remote-debugging-port=9222"]
                 )
