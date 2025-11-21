@@ -30,6 +30,11 @@ def get_browser_config(is_setup=False):
             executable_path = path
             break
     
+    if executable_path:
+        print(f"Using Edge executable: {executable_path}")
+    else:
+        print("Warning: Could not find Edge executable in standard locations!")
+    
     if is_setup:
         # Use GUI mode for setup to allow clicking
         return {"executable_path": executable_path, "headless": False}
@@ -114,7 +119,7 @@ async def get_selector_from_click(page, element_name):
         window.clickedElement = e.target;
     }, true);
     """)
-    await asyncio.to_thread(input, f"Click on the {element_name} in the browser and press Enter")
+    input(f"Click on the {element_name} in the browser and press Enter")
     selector = await page.evaluate("""
     let el = window.clickedElement;
     let selector = '';
@@ -132,7 +137,7 @@ async def get_selector_from_click(page, element_name):
         print(f"Detected selector for {element_name}: {selector}")
         return selector
     else:
-        return await asyncio.to_thread(input, f"Could not detect selector for {element_name}, enter manually: ")
+        return input(f"Could not detect selector for {element_name}, enter manually: ")
 
 async def add_to_basket(url, selector, context):
     try:
@@ -314,40 +319,48 @@ async def main():
                 url = input("Enter product URL (or 'done' to finish): ").strip()
                 if url.lower() == 'done':
                     break
-                page = await context.new_page()
-                await page.goto(url)
-                await page.wait_for_load_state('networkidle')
-                await page.wait_for_timeout(3000)
-                selector = await get_selector_from_click(page, "price")
-                element = await page.query_selector(selector)
-                current_price = None
-                if element:
-                    price_text = await element.inner_text()
-                    current_price = parse_price(price_text)
-                    if current_price:
-                        print(f"Detected current price: {current_price}")
+                try:
+                    page = await context.new_page()
+                    await page.goto(url)
+                    await page.wait_for_load_state('networkidle')
+                    await page.wait_for_timeout(3000)
+                    selector = await get_selector_from_click(page, "price")
+                    element = await page.query_selector(selector)
+                    current_price = None
+                    if element:
+                        price_text = await element.inner_text()
+                        current_price = parse_price(price_text)
+                        if current_price:
+                            print(f"Detected current price: {current_price}")
+                        else:
+                            print("Could not parse price from element")
+                    if not current_price:
+                        current_price = float(input("Enter current price: ").replace(',', ''))
+                    add_sel = input("Do you want to set add to basket for this product? (y/n): ").strip().lower()
+                    if add_sel == 'y':
+                        add_selector = await get_selector_from_click(page, "add to basket button")
                     else:
-                        print("Could not parse price from element")
-                if not current_price:
-                    current_price = float(input("Enter current price: ").replace(',', ''))
-                add_sel = input("Do you want to set add to basket for this product? (y/n): ").strip().lower()
-                if add_sel == 'y':
-                    add_selector = await get_selector_from_click(page, "add to basket button")
-                else:
-                    add_selector = None
-                title = await page.title()
-                await page.close()
-                product_index = len(products) + 1
-                products.append({'url': url, 'selector': selector, 'price': current_price, 'add_selector': add_selector, 'added': False, 'title': title, 'index': product_index})
+                        add_selector = None
+                    title = await page.title()
+                    await page.close()
+                    product_index = len(products) + 1
+                    products.append({'url': url, 'selector': selector, 'price': current_price, 'add_selector': add_selector, 'added': False, 'title': title, 'index': product_index})
 
-                # Send first Telegram notification
-                message = f"🆕 New Product Added!\n📦 {title}\n💰 Current Price: {current_price:,}\n🔗 {url}"
-                await send_telegram(message)
+                    # Send first Telegram notification
+                    message = f"🆕 New Product Added!\n📦 {title}\n💰 Current Price: {current_price:,}\n🔗 {url}"
+                    await send_telegram(message)
+                    print(f"Product added successfully! Total products: {len(products)}")
+                except Exception as e:
+                    print(f"Error adding product: {e}")
+                    print("Please try again or type 'done' to finish.")
 
             # Save products to JSON
-            with open('products.json', 'w') as f:
-                json.dump(products, f)
-            print("Products saved to products.json")
+            if products:
+                with open('products.json', 'w') as f:
+                    json.dump(products, f)
+                print(f"Products saved to products.json ({len(products)} products)")
+            else:
+                print("No products to save.")
 
             if not products:
                 print("No products added.")
