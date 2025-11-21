@@ -68,8 +68,9 @@ Install `requests` package if not present. Notifications are sent when adding pr
 
 The script now supports **hybrid mode**: GUI setup with headless monitoring for optimal VPS deployment.
 
-- **Setup Phase**: Uses GUI mode to allow clicking on price elements and add-to-basket buttons
-- **Monitoring Phase**: Runs headless for efficient 24/7 operation without graphics acceleration
+- **Setup Phase**: Uses Chromium GUI mode to allow clicking on price elements and add-to-basket buttons
+- **Monitoring Phase**: Uses Chromium headless mode for efficient 24/7 operation
+- **Session Persistence**: Same browser (Chromium) for both phases ensures login sessions and cookies work for add-to-basket functionality
 
 Set the environment variable for VPS mode:
 
@@ -81,15 +82,17 @@ Or the script automatically detects headless capability.
 
 ### Setup Process (GUI Mode)
 
-1. **Interactive Setup**: Browser opens for visual element selection
+1. **Interactive Setup**: Chromium browser opens for visual element selection
 2. **Click Selection**: Click on price elements and add-to-basket buttons when prompted
 3. **Auto-Detection**: Prices are automatically parsed from selected elements
-4. **Products Saved**: Configuration saved to products.json for headless monitoring
+4. **Login Sessions**: Any logins performed during setup persist for monitoring
+5. **Products Saved**: Configuration saved to products.json for headless monitoring
 
 ### Monitoring Process (Headless Mode)
 
 - ✅ Runs without display after setup
-- ✅ Faster, lower resource usage
+- ✅ Maintains login sessions from setup
+- ✅ Add-to-basket works with persisted authentication
 - ✅ 24/7 continuous monitoring
 - ✅ No GUI dependencies for production
 

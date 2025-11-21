@@ -18,28 +18,13 @@ except ImportError:
 logging.basicConfig(filename='deal_hunter.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
 def get_browser_config(is_setup=False):
-    # Use system-installed Microsoft Edge for setup, Chromium for headless monitoring
+    # Use Chromium for both setup and monitoring to maintain login sessions
     if is_setup:
         # Use GUI mode for setup to allow clicking
-        edge_paths = [
-            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-        ]
-        
-        executable_path = None
-        for path in edge_paths:
-            if os.path.exists(path):
-                executable_path = path
-                break
-        
-        if executable_path:
-            print(f"Using Edge executable for setup: {executable_path}")
-        else:
-            print("Warning: Could not find Edge executable for setup!")
-        
-        return {"executable_path": executable_path, "headless": False}
+        print("Using Chromium for GUI setup")
+        return {"channel": "chromium", "headless": False}
     else:
-        # Use headless Chromium for monitoring (better VPS compatibility)
+        # Use headless mode for monitoring
         print("Using Chromium for headless monitoring")
         return {"channel": "chromium", "headless": True}
 
@@ -312,7 +297,7 @@ async def main():
             config = get_browser_config(is_setup=True)  # GUI mode for setup
             context = await p.chromium.launch_persistent_context(
                 user_data_dir,
-                executable_path=config["executable_path"],
+                channel=config["channel"],
                 headless=config["headless"],
                 args=["--remote-debugging-port=9222"]
             )
@@ -365,7 +350,7 @@ async def main():
                             # Recreate context
                             context = await p.chromium.launch_persistent_context(
                                 user_data_dir,
-                                executable_path=config["executable_path"],
+                                channel=config["channel"],
                                 headless=config["headless"],
                                 args=["--remote-debugging-port=9222"]
                             )
