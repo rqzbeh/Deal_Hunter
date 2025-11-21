@@ -254,19 +254,27 @@ async def main():
                     for i, new_price in enumerate(new_prices):
                         product = prods[i]
                         if new_price and new_price != product['price']:
-                            message = f"Price changed for {product['url']}: from {product['price']} to {new_price}"
+                            old_price = product['price']
+                            price_change_percent = abs(new_price - old_price) / old_price * 100
+                            
+                            message = f"Price changed for {product['url']}: from {old_price} to {new_price} ({price_change_percent:.1f}% change)"
                             print(message)
                             logging.info(message)
-                            if product['add_selector'] and not product['added'] and new_price < product['price'] * 0.6:
+                            
+                            # Add to basket if price drops by 50% or more
+                            if product['add_selector'] and not product['added'] and new_price <= old_price * 0.5:
                                 await add_to_basket(product['url'], product['add_selector'], context)
                                 product['added'] = True
                                 added_text = "yes"
-                                print(f"Added to basket due to >40% price drop for {product['url']}")
+                                print(f"Added to basket due to ≥50% price drop for {product['url']}")
                             else:
                                 added_text = "no"
-                            # Send Telegram notification for price drop
-                            message = f"Product No {product['index']}\nName: {product['title']}\nPrevious price: {product['price']}\nNew price: {new_price}\nLink: {product['url']}\nAdded to basket? {added_text}"
-                            await send_telegram(message)
+                            
+                            # Send Telegram notification only if price change is ≥40%
+                            if price_change_percent >= 40:
+                                message = f"Product No {product['index']}\nName: {product['title']}\nPrevious price: {old_price}\nNew price: {new_price}\nChange: {price_change_percent:.1f}%\nLink: {product['url']}\nAdded to basket? {added_text}"
+                                await send_telegram(message)
+                            
                             product['price'] = new_price
                     await asyncio.sleep(delay)
         finally:
