@@ -277,7 +277,8 @@ async def main():
                             
                             # Send Telegram notification only if price change is ≥40%
                             if price_change_percent >= 40:
-                                message = f"Product No {product['index']}\nName: {product['title']}\nPrevious price: {old_price}\nNew price: {new_price}\nChange: {price_change_percent:.1f}%\nLink: {product['url']}\nAdded to basket? {added_text}"
+                                change_direction = "↓ Dropped" if new_price < old_price else "↑ Increased"
+                                message = f"Product No {product['index']}\nName: {product['title']}\nPrevious price: {old_price}\nNew price: {new_price}\n{change_direction} by {price_change_percent:.1f}%\nLink: {product['url']}\nAdded to basket? {added_text}"
                                 await send_telegram(message)
                             
                             product['price'] = new_price
