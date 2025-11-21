@@ -255,7 +255,12 @@ async def main():
                         product = prods[i]
                         if new_price and new_price != product['price']:
                             old_price = product['price']
-                            price_change_percent = abs(new_price - old_price) / old_price * 100
+                            
+                            # Handle division by zero for price change calculation
+                            if old_price > 0:
+                                price_change_percent = abs(new_price - old_price) / old_price * 100
+                            else:
+                                price_change_percent = 100.0  # Treat as 100% change if old price was 0
                             
                             message = f"Price changed for {product['url']}: from {old_price} to {new_price} ({price_change_percent:.1f}% change)"
                             print(message)
