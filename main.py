@@ -75,7 +75,9 @@ def persian_to_english_digits(text):
 async def get_price(url, selector, context):
     try:
         page = await context.new_page()
-        await page.goto(url, timeout=30000)
+        # Increase timeout for VPS environments (60 seconds instead of 30)
+        timeout_ms = 60000 if os.environ.get('VPS_MODE', '').lower() == 'true' else 30000
+        await page.goto(url, timeout=timeout_ms)
         await page.wait_for_load_state('networkidle')
         await page.wait_for_timeout(3000)  # wait for JS
         element = await page.query_selector(selector)
@@ -129,7 +131,9 @@ async def add_to_basket(url, selector, context):
     try:
         print(f"Attempting to add to basket for {url} with selector: {selector}")
         page = await context.new_page()
-        await page.goto(url, timeout=30000)
+        # Increase timeout for VPS environments
+        timeout_ms = 60000 if os.environ.get('VPS_MODE', '').lower() == 'true' else 30000
+        await page.goto(url, timeout=timeout_ms)
         await page.wait_for_load_state('networkidle')
         await page.wait_for_timeout(3000)  # wait for JS
         print(f"Page title: {await page.title()}")
@@ -155,24 +159,53 @@ async def check_domain(domain, prods, context, domain_delays, products):
     count = len(prods)
     delay = domain_delays[domain]
     print(f"Checking {count} products on {domain}, current delay: {delay:.1f}s")
-    # Concurrently check all products in the domain
-    tasks = [get_price(product['url'], product['selector'], context) for product in prods]
-    new_prices = await asyncio.gather(*tasks)
+    
+    new_prices = []
+    # Check products one by one with delay between each to avoid rate limiting
+    for i, product in enumerate(prods):
+        if i > 0:  # Add delay between products on same domain
+            await asyncio.sleep(0.5)  # 0.5 second delay between products
+        
+        price = await get_price(product['url'], product['selector'], context)
+        new_prices.append(price)
+        
+        # Show current price in terminal for monitoring
+        if price is not None:
+            print(f"📊 {product['title'][:30]}... - Current: {price:,} (was: {product['price']:,})")
+        else:
+            print(f"❌ {product['title'][:30]}... - Failed to get price")
+    
     failures = sum(1 for p in new_prices if p is None)
+    
+    # More conservative delay optimization - don't fluctuate as much
     if failures == 0:
-        # All successful, decrease delay aggressively
+        # Only slightly decrease delay when all successful (don't be too aggressive)
         old_delay = delay
-        domain_delays[domain] = max(0.05, delay * 0.7)  # 30% decrease each time
-        if domain_delays[domain] != old_delay:
-            print(f"⚡ Optimized delay for {domain}: {old_delay:.2f}s → {domain_delays[domain]:.2f}s")
+        domain_delays[domain] = max(0.1, delay * 0.9)  # 10% decrease instead of 30%
+        if abs(domain_delays[domain] - old_delay) > 0.05:  # Only show significant changes
+            print(f"⚡ Slightly optimized delay for {domain}: {old_delay:.2f}s → {domain_delays[domain]:.2f}s")
     else:
-        # Some failures, increase slowly and incrementally
-        # Add 0.5 seconds for each failure, but cap at reasonable max
+        # Increase delay on failures, but remember the last working delay
+        if f"{domain}_last_good_delay" not in domain_delays:
+            domain_delays[f"{domain}_last_good_delay"] = delay
+        
         old_delay = delay
         increment = failures * 0.5
-        domain_delays[domain] = min(30.0, delay + increment)
+        new_delay = min(30.0, delay + increment)
+        
+        # If new delay is much higher than last good delay, cap it
+        last_good = domain_delays.get(f"{domain}_last_good_delay", delay)
+        if new_delay > last_good * 2:  # Don't go more than 2x the last good delay
+            new_delay = last_good * 2
+        
+        domain_delays[domain] = new_delay
+        
         if domain_delays[domain] != old_delay:
-            print(f"Increased delay for {domain} by {increment:.1f}s due to {failures} failures (new delay: {domain_delays[domain]:.1f}s)")
+            print(f"⚠️ Increased delay for {domain} by {increment:.1f}s due to {failures} failures (new delay: {domain_delays[domain]:.1f}s)")
+        
+        # Update last good delay if current delay was working before this failure
+        if failures < len(prods):  # Some succeeded
+            domain_delays[f"{domain}_last_good_delay"] = old_delay
     for i, new_price in enumerate(new_prices):
         product = prods[i]
         if new_price and new_price != product['price']:
@@ -220,7 +253,7 @@ async def check_domain(domain, prods, context, domain_delays, products):
                 product['history'] = product['history'][-100:]
 
 async def send_telegram(message):
-    if not telegram_enabled:
+    if not telegram_enabled or requests is None:
         return
     try:
         await asyncio.to_thread(
