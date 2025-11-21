@@ -17,8 +17,13 @@ except ImportError:
 
 logging.basicConfig(filename='deal_hunter.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
-def get_browser_config():
-    return {"channel": "msedge", "headless": False}
+def get_browser_config(is_setup=False):
+    if is_setup:
+        # Use GUI mode for setup to allow clicking
+        return {"channel": "chromium", "headless": False}
+    else:
+        # Use headless mode for monitoring
+        return {"channel": "chromium", "headless": True}
 
 def get_user_data_dir():
     return f"C:\\Users\\{os.environ['USERNAME']}\\AppData\\Local\\Microsoft\\Edge\\User Data"
@@ -253,7 +258,15 @@ async def main():
     await asyncio.sleep(2)  # wait for cleanup
 
     user_data_dir = get_user_data_dir()
-    config = get_browser_config()
+    config = get_browser_config(is_setup=True)  # GUI mode for setup
+
+    # Check if running on VPS (no GUI) - use headless setup
+    import os
+    is_vps = os.environ.get('VPS_MODE', '').lower() == 'true' or config["headless"]
+
+    if is_vps:
+        print("Running in VPS mode - setup will use GUI, monitoring will be headless")
+        # For VPS, setup still uses GUI for element selection, monitoring is headless
 
     # Load products if exists
     if os.path.exists('products.json'):
@@ -276,7 +289,7 @@ async def main():
         domain_delays = {}
 
     if not products:
-        # Setup new products
+        # Setup new products - always use GUI mode for element selection
         async with async_playwright() as p:
             context = await p.chromium.launch_persistent_context(
                 user_data_dir,
@@ -337,6 +350,7 @@ async def main():
     while True:
         try:
             async with async_playwright() as p:
+                config = get_browser_config(is_setup=False)  # Headless mode for monitoring
                 context = await p.chromium.launch_persistent_context(
                     user_data_dir,
                     channel=config["channel"],

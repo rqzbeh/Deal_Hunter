@@ -1,6 +1,6 @@
 # Deal Hunter
 
-A Python script to monitor product prices on websites, automatically add items to basket on significant drops, and log changes. Uses async concurrency for efficient multi-site monitoring with anti-blocking measures.
+A **Windows-only** Python script to monitor product prices on websites, automatically add items to basket on significant drops, and log changes. Uses async concurrency for efficient multi-site monitoring with anti-blocking measures.
 
 ## Features
 
@@ -22,7 +22,7 @@ A Python script to monitor product prices on websites, automatically add items t
 
 2. Install Playwright browsers:
 
-   ```bash
+   ```powershell
    python -m playwright install msedge
    ```
 
@@ -32,7 +32,7 @@ A Python script to monitor product prices on websites, automatically add items t
 
 Run the script:
 
-```bash
+```powershell
 python main.py
 ```
 
@@ -62,25 +62,35 @@ Install `requests` package if not present. Notifications are sent when adding pr
 - Adapts check delays per domain based on reliability (decreases on success, increases on failures)
 - Logs all price changes to deal_hunter.log
 
-## Linux/VPS Compatibility
+## VPS/Headless Mode Setup
 
-Currently, this script is designed for Windows and uses Microsoft Edge with a user profile. To run on Linux/VPS:
+The script now supports **hybrid mode**: GUI setup with headless monitoring for optimal VPS deployment.
 
-1. **Browser Options**: Replace Edge with Chromium or Firefox
-   - Install Playwright browsers: `python -m playwright install chromium`
-   - Modify the script to use `chromium` instead of `msedge` channel
-   - Update user data directory path for Linux (e.g., `~/.config/chromium/`)
+- **Setup Phase**: Uses GUI mode to allow clicking on price elements and add-to-basket buttons
+- **Monitoring Phase**: Runs headless for efficient 24/7 operation without graphics acceleration
 
-2. **Headless Mode**: For VPS without display:
-   - Set `headless=True` in `launch_persistent_context()`
-   - Note: Click-based selector detection won't work in headless mode - you'll need to manually specify selectors or run setup on a desktop first
+Set the environment variable for VPS mode:
 
-3. **Path Changes**: Update Windows-specific paths:
-   - Replace `C:\\Users\\{username}\\...` with Linux paths
-   - Use `os.path.expanduser('~')` for cross-platform home directory
+```powershell
+$env:VPS_MODE = "true"
+```
 
-4. **Process Management**: The `taskkill` command is Windows-specific:
-   - Replace with `pkill msedge` or `killall chromium` on Linux
-   - Or remove this section if running in a clean VPS environment
+Or the script automatically detects headless capability.
 
-Example modifications for Linux would involve changing the browser launch code to use Chromium and appropriate Linux paths.
+### Setup Process (GUI Mode)
+
+1. **Interactive Setup**: Browser opens for visual element selection
+2. **Click Selection**: Click on price elements and add-to-basket buttons when prompted
+3. **Auto-Detection**: Prices are automatically parsed from selected elements
+4. **Products Saved**: Configuration saved to products.json for headless monitoring
+
+### Monitoring Process (Headless Mode)
+
+- ✅ Runs without display after setup
+- ✅ Faster, lower resource usage
+- ✅ 24/7 continuous monitoring
+- ✅ No GUI dependencies for production
+
+### VPS Deployment
+
+Perfect for VPS environments - use GUI locally for setup, then deploy headless for monitoring.
