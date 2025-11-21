@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+deal_hunter.log
+domain_delays.json
+products.json
+.venv/
+venv/
