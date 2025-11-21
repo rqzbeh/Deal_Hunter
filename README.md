@@ -26,6 +26,8 @@ A **Windows-only** Python script to monitor product prices on websites, automati
    python -m playwright install msedge
    ```
 
+   **Note**: The script uses your system-installed Microsoft Edge browser, not Playwright's bundled version. Make sure Microsoft Edge is installed on your system.
+
 3. Close Microsoft Edge if it's running, so the script can use your profile with saved logins.
 
 ## Usage
