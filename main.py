@@ -15,21 +15,69 @@ try:
 except ImportError:
     requests = None
 
-logging.basicConfig(filename='deal_hunter.log', level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.basicConfig(
+    filename='deal_hunter.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    # Also log to console for immediate feedback
+)
+# Add console handler for real-time monitoring output
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(asctime)s - %(message)s')
+console_handler.setFormatter(console_formatter)
+logging.getLogger().addHandler(console_handler)
 
 def get_browser_config(is_setup=False):
     # Use Chromium for both setup and monitoring to maintain login sessions
+    base_args = [
+        "--remote-debugging-port=9222",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-features=TranslateUI",
+        "--disable-ipc-flooding-protection",
+        "--disable-hang-monitor",
+        "--disable-prompt-on-repost",
+        "--force-renderer-accessibility",
+        "--disable-web-security",  # For CORS issues
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ]
+    
     if is_setup:
         # Use GUI mode for setup to allow clicking
         print("Using Chromium for GUI setup")
-        return {"channel": "chromium", "headless": False}
+        return {
+            "channel": "chromium", 
+            "headless": False,
+            "args": base_args
+        }
     else:
-        # Use headless mode for monitoring
+        # Use headless mode for monitoring - more stable for VPS
         print("Using Chromium for headless monitoring")
-        return {"channel": "chromium", "headless": True}
+        return {
+            "channel": "chromium", 
+            "headless": True,
+            "args": base_args + [
+                "--disable-extensions",
+                "--disable-plugins",
+                "--disable-images",  # Speed up loading
+                "--disable-javascript-harmony-shipping"  # Reduce memory usage
+            ]
+        }
 
 def get_user_data_dir():
-    return f"C:\\Users\\{os.environ['USERNAME']}\\AppData\\Local\\Microsoft\\Edge\\User Data"
+    # Use a more robust user data directory that works in disconnected RDP sessions
+    base_dir = os.path.join(os.environ.get('USERPROFILE', ''), 'AppData', 'Local')
+    user_data_dir = os.path.join(base_dir, 'DealHunter', 'ChromeProfile')
+    
+    # Ensure directory exists
+    os.makedirs(user_data_dir, exist_ok=True)
+    return user_data_dir
 
 def kill_edge_processes():
     system = platform.system()
@@ -158,7 +206,9 @@ async def add_to_basket(url, selector, context):
 async def check_domain(domain, prods, context, domain_delays, products):
     count = len(prods)
     delay = domain_delays[domain]
-    print(f"Checking {count} products on {domain}, current delay: {delay:.1f}s")
+    log_message = f"Checking {count} products on {domain}, current delay: {delay:.1f}s"
+    print(log_message)
+    logging.info(log_message)
     
     new_prices = []
     # Check products one by one with delay between each to avoid rate limiting
@@ -171,9 +221,13 @@ async def check_domain(domain, prods, context, domain_delays, products):
         
         # Show current price in terminal for monitoring
         if price is not None:
-            print(f"📊 {product['title'][:30]}... - Current: {price:,} (was: {product['price']:,})")
+            price_message = f"📊 {product['title'][:30]}... - Current: {price:,} (was: {product['price']:,})"
+            print(price_message)
+            logging.info(f"Price check - {product['title'][:50]}: {price:,}")
         else:
-            print(f"❌ {product['title'][:30]}... - Failed to get price")
+            error_message = f"❌ {product['title'][:30]}... - Failed to get price"
+            print(error_message)
+            logging.warning(f"Price check failed - {product['title'][:50]}")
     
     failures = sum(1 for p in new_prices if p is None)
     
@@ -183,7 +237,9 @@ async def check_domain(domain, prods, context, domain_delays, products):
         old_delay = delay
         domain_delays[domain] = max(0.1, delay * 0.9)  # 10% decrease instead of 30%
         if abs(domain_delays[domain] - old_delay) > 0.05:  # Only show significant changes
-            print(f"⚡ Slightly optimized delay for {domain}: {old_delay:.2f}s → {domain_delays[domain]:.2f}s")
+            delay_message = f"⚡ Slightly optimized delay for {domain}: {old_delay:.2f}s → {domain_delays[domain]:.2f}s"
+            print(delay_message)
+            logging.info(f"Delay optimization - {domain}: {old_delay:.2f}s → {domain_delays[domain]:.2f}s")
     else:
         # Increase delay on failures, but remember the last working delay
         if f"{domain}_last_good_delay" not in domain_delays:
@@ -201,7 +257,9 @@ async def check_domain(domain, prods, context, domain_delays, products):
         domain_delays[domain] = new_delay
         
         if domain_delays[domain] != old_delay:
-            print(f"⚠️ Increased delay for {domain} by {increment:.1f}s due to {failures} failures (new delay: {domain_delays[domain]:.1f}s)")
+            delay_message = f"⚠️ Increased delay for {domain} by {increment:.1f}s due to {failures} failures (new delay: {domain_delays[domain]:.1f}s)"
+            print(delay_message)
+            logging.warning(f"Delay increased - {domain}: {old_delay:.1f}s → {domain_delays[domain]:.1f}s (failures: {failures})")
         
         # Update last good delay if current delay was working before this failure
         if failures < len(prods):  # Some succeeded
@@ -330,9 +388,9 @@ async def main():
             config = get_browser_config(is_setup=True)  # GUI mode for setup
             context = await p.chromium.launch_persistent_context(
                 user_data_dir,
-                channel=config["channel"],
-                headless=config["headless"],
-                args=["--remote-debugging-port=9222"]
+                channel=config.get("channel"),
+                headless=config.get("headless"),
+                args=config.get("args", ["--remote-debugging-port=9222"])
             )
 
             while True:
@@ -421,11 +479,13 @@ async def main():
                 context = await p.chromium.launch_persistent_context(
                     user_data_dir,
                     channel=config.get("channel"),
-                    headless=config["headless"],
-                    args=["--remote-debugging-port=9222"]
+                    headless=config.get("headless"),
+                    args=config.get("args", ["--remote-debugging-port=9222"])
                 )
 
                 print("Starting price monitoring...")
+                logging.info("=== DEAL HUNTER MONITORING STARTED ===")
+                logging.info(f"Monitoring {len(products)} products across {len(domains)} domains")
 
                 # Send notification about products being tracked
                 if products:
@@ -447,7 +507,11 @@ async def main():
                         domain_delays[domain] = 0.1  # Start very aggressively at 0.1s
 
                 try:
+                    cycle_count = 0
                     while True:
+                        cycle_count += 1
+                        logging.info(f"=== MONITORING CYCLE #{cycle_count} STARTED ===")
+                        
                         # Check all domains concurrently for faster monitoring
                         domain_tasks = []
                         for domain, prods in domains.items():
@@ -458,8 +522,10 @@ async def main():
                         
                         # Smart delay: use minimum delay across all domains for faster overall checking
                         min_delay = min(domain_delays.values()) if domain_delays else 0.1
+                        logging.info(f"Cycle #{cycle_count} completed. Next check in {min_delay:.1f}s")
                         await asyncio.sleep(min_delay)
                 finally:
+                    logging.info("=== DEAL HUNTER MONITORING STOPPED ===")
                     # Save domain delays
                     with open('domain_delays.json', 'w') as f:
                         json.dump(domain_delays, f)
