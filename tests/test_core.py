@@ -19,6 +19,7 @@ from main import (
     llm_detect_selectors,
     call_llm,
     send_telegram,
+    wait_for_telegram_approval,
 )
 
 
@@ -90,11 +91,49 @@ async def test_send_telegram(monkeypatch):
 
     monkeypatch.setenv('TELEGRAM_BOT_TOKEN', 'x')
     monkeypatch.setenv('TELEGRAM_CHAT_ID', '123')
+    monkeypatch.setattr('main.TELEGRAM_ENABLED', True)
+    monkeypatch.setattr('main.TELEGRAM_CHAT_ID', '123')
+    monkeypatch.setattr('main.TELEGRAM_BOT_TOKEN', 'x')
+    monkeypatch.setattr('main.TELEGRAM_ENABLED', True)
+    monkeypatch.setattr('main.TELEGRAM_CHAT_ID', '123')
+    monkeypatch.setattr('main.TELEGRAM_BOT_TOKEN', 'x')
     monkeypatch.setattr('main.requests.post', fake_post)
     await send_telegram('hello')
     data = called.get('data')
     assert data is not None
     assert 'hello' in data.get('text', '')
+
+
+@pytest.mark.asyncio
+async def test_wait_for_telegram_approval(monkeypatch):
+    # Simulate a sequence of getUpdates responses, with the last one containing the required code
+    seq = [
+        {'ok': True, 'result': []},
+        {'ok': True, 'result': [{'update_id': 1, 'message': {'chat': {'id': 123}, 'text': 'some other text'}}]},
+        {'ok': True, 'result': [{'update_id': 2, 'message': {'chat': {'id': 123}, 'text': 'X-12345-CONFIRM'}}]}
+    ]
+    called = {'i': 0}
+    class DummyResp:
+        def __init__(self, j):
+            self._j = j
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return self._j
+
+    def fake_get(url, params=None, timeout=None):
+        i = called['i']
+        called['i'] += 1
+        return DummyResp(seq[min(i, len(seq)-1)])
+
+    monkeypatch.setenv('TELEGRAM_BOT_TOKEN', 'x')
+    monkeypatch.setenv('TELEGRAM_CHAT_ID', '123')
+    monkeypatch.setattr('main.TELEGRAM_ENABLED', True)
+    monkeypatch.setattr('main.TELEGRAM_CHAT_ID', '123')
+    monkeypatch.setattr('main.TELEGRAM_BOT_TOKEN', 'x')
+    monkeypatch.setattr('main.requests.get', fake_get)
+    ok = await wait_for_telegram_approval('X-12345-CONFIRM', timeout=5)
+    assert ok is True
 
 
 @pytest.mark.asyncio
