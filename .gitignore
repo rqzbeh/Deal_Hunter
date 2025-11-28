@@ -3,5 +3,7 @@ __pycache__/
 deal_hunter.log
 domain_delays.json
 products.json
+.cache
+llm_cache.json
 .venv/
 venv/
