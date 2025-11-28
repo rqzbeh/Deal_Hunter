@@ -18,6 +18,7 @@ from main import (
     add_to_basket_with_page,
     llm_detect_selectors,
     call_llm,
+    send_telegram,
 )
 
 
@@ -48,6 +49,52 @@ def test_llm_cache_load_save(tmp_path, monkeypatch):
 
     loaded = load_llm_cache()
     assert loaded == cache
+
+
+def test_call_llm_mock(monkeypatch):
+    # Mock requests.post to return a dummy Groq-like response
+    class DummyResp:
+        def __init__(self, j):
+            self._j = j
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return self._j
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        return DummyResp({
+            'choices': [
+                {'message': {'content': '{"price_selector":"#p","add_selector":"#a","checkout_selector":"#c","payment_indicator":"","confidence":0.9}'}}
+            ]
+        })
+
+    # Monkeypatch requests.post on the requests module used by main
+    monkeypatch.setenv('GROQ_API_KEY', 'fake-key')
+    monkeypatch.setattr('main.requests.post', fake_post)
+    result = call_llm('dummy prompt', system='sys')
+    assert isinstance(result, str)
+    assert 'price_selector' in result
+
+
+@pytest.mark.asyncio
+async def test_send_telegram(monkeypatch):
+    # Setup environment and monkeypatch requests.post
+    called = {}
+    def fake_post(url, data=None, timeout=None):
+        called['url'] = url
+        called['data'] = data
+        class D:
+            def raise_for_status(self):
+                return None
+        return D()
+
+    monkeypatch.setenv('TELEGRAM_BOT_TOKEN', 'x')
+    monkeypatch.setenv('TELEGRAM_CHAT_ID', '123')
+    monkeypatch.setattr('main.requests.post', fake_post)
+    await send_telegram('hello')
+    data = called.get('data')
+    assert data is not None
+    assert 'hello' in data.get('text', '')
 
 
 @pytest.mark.asyncio
