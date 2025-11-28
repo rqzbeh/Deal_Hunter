@@ -49,7 +49,7 @@ ALLOW_AUTO_CHECKOUT = True
 ALLOW_AUTO_PLACE_ORDER = False
 
 # AI-only Groq integration (no heuristics, no provider selection)
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY') or os.environ.get('LLM_API_KEY')  # fallback env name
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY')  # strict Groq-only key (no fallback)
 LLM_MODEL = 'llama-3.1-8b-instant'
 ENABLE_LLM_AUTODETECT = bool(GROQ_API_KEY)
 ENABLE_TELEGRAM_APPROVAL = TELEGRAM_ENABLED
