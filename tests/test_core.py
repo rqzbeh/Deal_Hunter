@@ -20,6 +20,7 @@ from main import (
     call_llm,
     send_telegram,
     wait_for_telegram_approval,
+    attempt_checkout_with_page,
 )
 
 
@@ -207,5 +208,41 @@ async def test_llm_detect_selectors_with_mock(monkeypatch, tmp_path):
         # The cache key should be "selectors:<url>" where url matches page.url
         assert any(k.startswith('selectors:') for k in cache.keys())
 
+        await ctx.close()
+        await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_attempt_checkout_detects_payment(monkeypatch):
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        ctx = await browser.new_context()
+        page = await ctx.new_page()
+        html = """
+        <html>
+        <body>
+            <button id="add">Add</button>
+            <button id="checkout">Checkout</button>
+            <script>
+            document.getElementById('checkout').addEventListener('click', function(){
+                document.body.innerHTML += '<div id="payment-ind">PAY</div>';
+            });
+            </script>
+        </body>
+        </html>
+        """
+        import urllib.parse
+        data_url = 'data:text/html,' + urllib.parse.quote(html)
+        await page.goto(data_url)
+        product = {
+            'url': page.url,
+            'title': 'test',
+            'price': 100.0,
+            'add_selector': '#add',
+            'checkout_selector': '#checkout',
+            'payment_indicator': '#payment-ind'
+        }
+        res = await attempt_checkout_with_page(page, product)
+        assert res is True
         await ctx.close()
         await browser.close()
