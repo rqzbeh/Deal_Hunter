@@ -113,20 +113,32 @@ def parse_price(text: str):
 
 
 async def send_telegram(message: str):
-    if not TELEGRAM_ENABLED or not requests:
+    """Send a Telegram message if TELEG credentials are present in the environment.
+    Read credentials from environment at call-time so tests and runtime can mutate env without reloading the module.
+    """
+    if not requests:
+        return
+    token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    chat = os.environ.get('TELEGRAM_CHAT_ID')
+    if not token or not chat:
         return
     try:
         post = requests.post
-        await asyncio.to_thread(post, f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage', data={'chat_id': TELEGRAM_CHAT_ID, 'text': message, 'parse_mode': 'HTML'})
+        await asyncio.to_thread(post, f'https://api.telegram.org/bot{token}/sendMessage', data={'chat_id': chat, 'text': message, 'parse_mode': 'HTML'})
     except Exception as e:
         logging.warning(f'Failed to send Telegram: {e}')
 
 
 async def wait_for_telegram_approval(code: str, timeout: int = 60) -> bool:
-    if not TELEGRAM_ENABLED or not requests:
+    # Read TELEG credentials from environment at call-time (see send_telegram)
+    if not requests:
+        return False
+    token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    chat = os.environ.get('TELEGRAM_CHAT_ID')
+    if not token or not chat:
         return False
     try:
-        url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates'
+        url = f'https://api.telegram.org/bot{token}/getUpdates'
         end = time.time() + timeout
         offset = None
         while time.time() < end:
@@ -144,7 +156,7 @@ async def wait_for_telegram_approval(code: str, timeout: int = 60) -> bool:
                 msg = update.get('message') or update.get('edited_message')
                 if not msg:
                     continue
-                if str(msg.get('chat', {}).get('id')) != str(TELEGRAM_CHAT_ID):
+                if str(msg.get('chat', {}).get('id')) != str(chat):
                     continue
                 text = msg.get('text', '')
                 if text and code in text:
